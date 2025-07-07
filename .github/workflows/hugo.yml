@@ -1,4 +1,58 @@
-- name: Build with Hugo
+# 部署 Hugo 站点到 GitHub Pages，并绑定自定义域名 nav.sso.pp.ua
+name: Deploy Hugo site to Pages
+
+on:
+  # 推送到 main 分支时自动触发
+  push:
+    branches: ["main"]
+
+  # 允许手动触发部署
+  workflow_dispatch:
+
+# 权限配置：允许部署 Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 防止多个部署任务冲突
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+# 默认使用 bash shell
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # 构建 Hugo 项目
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: 0.128.0
+    steps:
+      - name: 安装 Hugo CLI
+        run: |
+          wget -O ${{ runner.temp }}/hugo.deb https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
+          && sudo dpkg -i ${{ runner.temp }}/hugo.deb
+
+      - name: 安装 Dart Sass（用于 WebStack-Hugo）
+        run: sudo snap install dart-sass
+
+      - name: 检出源码
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: 配置 GitHub Pages 环境
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: 安装 Node.js 依赖（如有）
+        run: "[[ -f package-lock.json || -f npm-shrinkwrap.json ]] && npm ci || true"
+
+      - name: Hugo 构建网站
         env:
           HUGO_CACHEDIR: ${{ runner.temp }}/hugo_cache
           HUGO_ENVIRONMENT: production
@@ -7,72 +61,15 @@
             --minify \
             --baseURL "https://nav.sso.pp.ua"
 
-      - name: Set custom domain
+      - name: 设置自定义域名
         run: echo 'nav.sso.pp.ua' > public/CNAME
-# Sample workflow for building and deploying a Hugo site to GitHub Pages
-name: Deploy Hugo site to Pages
 
-on:
-  # Runs on pushes targeting the default branch
-  push:
-    branches: ["main"]
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
-# Default to bash
-defaults:
-  run:
-    shell: bash
-
-jobs:
-  # Build job
-  build:
-    runs-on: ubuntu-latest
-    env:
-      HUGO_VERSION: 0.128.0
-    steps:
-      - name: Install Hugo CLI
-        run: |
-          wget -O ${{ runner.temp }}/hugo.deb https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
-          && sudo dpkg -i ${{ runner.temp }}/hugo.deb
-      - name: Install Dart Sass
-        run: sudo snap install dart-sass
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Setup Pages
-        id: pages
-        uses: actions/configure-pages@v5
-      - name: Install Node.js dependencies
-        run: "[[ -f package-lock.json || -f npm-shrinkwrap.json ]] && npm ci || true"
-      - name: Build with Hugo
-        env:
-          HUGO_CACHEDIR: ${{ runner.temp }}/hugo_cache
-          HUGO_ENVIRONMENT: production
-        run: |
-          hugo \
-            --minify \
-            --baseURL "${{ steps.pages.outputs.base_url }}/"
-      - name: Upload artifact
+      - name: 上传构建产物
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
 
-  # Deployment job
+  # 部署到 GitHub Pages
   deploy:
     environment:
       name: github-pages
@@ -80,6 +77,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Deploy to GitHub Pages
+      - name: 发布到 GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
